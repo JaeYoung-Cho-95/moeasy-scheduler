@@ -31,7 +31,6 @@ public class SurveyUtils {
     List<Map<String, Map<String, Object>>> summarized = new ArrayList<>();
 
     for (Map<String, Map<String, Object>> perQuestion : aggregates) {
-      // 각 perQuestion에는 단 하나의 키(질문)만 있다고 가정
       if (perQuestion.isEmpty()) {
         summarized.add(perQuestion);
         continue;
@@ -44,7 +43,6 @@ public class SurveyUtils {
         continue;
       }
 
-      // 최대값 계산(others, 숫자 아님 값 제외)
       Long maxVal = null;
       for (Map.Entry<String, Object> e : answers.entrySet()) {
         String key = e.getKey();
@@ -94,9 +92,9 @@ public class SurveyUtils {
       throws IOException {
     List<String> ageOrder = Arrays.asList("18–24세", "25–34세", "35–44세", "45–54세", "55세 이상");
     Map<String, Integer> contents = new LinkedHashMap<>();
-      for (String k : ageOrder) {
-          contents.put(k, 0);
-      }
+    for (String k : ageOrder) {
+      contents.put(k, 0);
+    }
 
     if (resultsJson != null && !resultsJson.isBlank()) {
       TypeReference<List<Map<String, Map<String, Object>>>> typeRef = new TypeReference<>() {
@@ -104,23 +102,28 @@ public class SurveyUtils {
       List<Map<String, Map<String, Object>>> rows = objectMapper.readValue(resultsJson, typeRef);
 
       for (Map<String, Map<String, Object>> perQuestion : rows) {
-          if (perQuestion == null || perQuestion.isEmpty()) {
-              continue;
-          }
-          if (!perQuestion.containsKey(Q_AGE)) {
-              continue;
-          }
+        if (perQuestion == null || perQuestion.isEmpty()) {
+          continue;
+        }
+        if (!perQuestion.containsKey(Q_AGE)) {
+          continue;
+        }
 
         Map<String, Object> answers = perQuestion.get(Q_AGE);
-          if (answers == null) {
-              break;
-          }
+        if (answers == null) {
+          break;
+        }
 
         for (String k : ageOrder) {
           contents.put(k, toInt(answers.get(k)));
         }
         break; // 연령대 문항만 처리
       }
+    }
+
+    boolean allZero = contents.values().stream().allMatch(v -> v == null || v == 0);
+    if (allZero) {
+      return null;
     }
 
     return GraphItemDto.builder()
@@ -134,31 +137,38 @@ public class SurveyUtils {
       throws IOException {
     Map<String, Integer> contents = new LinkedHashMap<>();
     List<String> keys = Arrays.asList("남성", "여성", "응답 거부", "해당 없음(논바이너리 등)");
-      for (String k : keys) {
-          contents.put(k, 0);
-      }
+    for (String k : keys) {
+      contents.put(k, 0);
+    }
 
-    TypeReference<List<Map<String, Map<String, Object>>>> typeRef = new TypeReference<>() {
-    };
-    List<Map<String, Map<String, Object>>> rows = objectMapper.readValue(resultsJson, typeRef);
+    if (resultsJson != null && !resultsJson.isBlank()) {
+      TypeReference<List<Map<String, Map<String, Object>>>> typeRef = new TypeReference<>() {
+      };
+      List<Map<String, Map<String, Object>>> rows = objectMapper.readValue(resultsJson, typeRef);
 
-    for (Map<String, Map<String, Object>> perQuestion : rows) {
+      for (Map<String, Map<String, Object>> perQuestion : rows) {
         if (perQuestion == null || perQuestion.isEmpty()) {
-            continue;
+          continue;
         }
         if (!perQuestion.containsKey(Q_GENDER)) {
-            continue;
+          continue;
         }
 
-      Map<String, Object> answers = perQuestion.get(Q_GENDER);
+        Map<String, Object> answers = perQuestion.get(Q_GENDER);
         if (answers == null) {
-            break;
+          break;
         }
 
-      for (String k : keys) {
-        contents.put(k, toInt(answers.get(k)));
+        for (String k : keys) {
+          contents.put(k, toInt(answers.get(k)));
+        }
+        break; // 성별 문항만 처리하면 종료
       }
-      break; // 성별 문항만 처리하면 종료
+    }
+
+    boolean allZero = contents.values().stream().allMatch(v -> v == null || v == 0);
+    if (allZero) {
+      return null;
     }
 
     return GraphItemDto.builder()
@@ -172,8 +182,16 @@ public class SurveyUtils {
       throws IOException {
     List<GraphItemDto> graphItemDtoList = new ArrayList<>();
 
-    graphItemDtoList.add(extractAge(resultsJson, objectMapper));
-    graphItemDtoList.add(extractGender(resultsJson, objectMapper));
+    GraphItemDto graphAgeDto = extractAge(resultsJson, objectMapper);
+    if (graphAgeDto != null) {
+      graphItemDtoList.add(graphAgeDto);
+    }
+
+    GraphItemDto graphGenderDto = extractGender(resultsJson, objectMapper);
+    if (graphGenderDto != null) {
+      graphItemDtoList.add(graphGenderDto);
+    }
+
     return graphItemDtoList;
   }
 

@@ -71,7 +71,7 @@ public class SurveyResultScheduler {
 
         SaveDataDto saveDataDto = SaveDataDto.builder()
             .subject(question.getTitle())
-            .graphs(graphData)
+            .graphs(graphData.isEmpty() ? null : graphData)
             .keywords(keywordsData)
             .content(contentDto.getContent())
             .sentences(sentencesData.getSentences())
