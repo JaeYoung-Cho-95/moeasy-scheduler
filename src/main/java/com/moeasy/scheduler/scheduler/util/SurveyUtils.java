@@ -47,9 +47,9 @@ public class SurveyUtils {
       for (Map.Entry<String, Object> e : answers.entrySet()) {
         String key = e.getKey();
         Object val = e.getValue();
-          if ("others".equals(key)) {
-              continue;
-          }
+        if ("others".equals(key)) {
+          continue;
+        }
         if (val instanceof Number n) {
           long v = n.longValue();
           if (maxVal == null || v > maxVal) {
@@ -58,13 +58,11 @@ public class SurveyUtils {
         }
       }
 
-      // 최대값이 없으면(숫자 항목 없음) 원본 유지
       if (maxVal == null) {
         summarized.add(perQuestion);
         continue;
       }
 
-      // 최대값만 남긴 맵 구성(others는 있으면 유지)
       Map<String, Object> filteredAnswers = new LinkedHashMap<>();
       if (answers.containsKey("others")) {
         filteredAnswers.put("others", answers.get("others"));
@@ -72,9 +70,9 @@ public class SurveyUtils {
       for (Map.Entry<String, Object> e : answers.entrySet()) {
         String key = e.getKey();
         Object val = e.getValue();
-          if ("others".equals(key)) {
-              continue;
-          }
+        if ("others".equals(key)) {
+          continue;
+        }
         if (val instanceof Number n && n.longValue() == maxVal) {
           filteredAnswers.put(key, n);
         }
@@ -117,7 +115,7 @@ public class SurveyUtils {
         for (String k : ageOrder) {
           contents.put(k, toInt(answers.get(k)));
         }
-        break; // 연령대 문항만 처리
+        break;
       }
     }
 
@@ -162,7 +160,7 @@ public class SurveyUtils {
         for (String k : keys) {
           contents.put(k, toInt(answers.get(k)));
         }
-        break; // 성별 문항만 처리하면 종료
+        break;
       }
     }
 
@@ -202,9 +200,9 @@ public class SurveyUtils {
 
   public static String excludeQuestions(String resultsJson, ObjectMapper objectMapper,
       Collection<String> questionsToExclude) throws IOException {
-      if (resultsJson == null || resultsJson.isBlank()) {
-          return resultsJson;
-      }
+    if (resultsJson == null || resultsJson.isBlank()) {
+      return resultsJson;
+    }
 
     TypeReference<List<Map<String, Object>>> ref = new TypeReference<>() {
     };
@@ -212,22 +210,53 @@ public class SurveyUtils {
 
     List<Map<String, Object>> out = new ArrayList<>();
     for (Map<String, Object> perQuestion : rows) {
-        if (perQuestion == null || perQuestion.isEmpty()) {
-            continue;
-        }
+      if (perQuestion == null || perQuestion.isEmpty()) {
+        continue;
+      }
       String question = perQuestion.keySet().iterator().next();
-        if (questionsToExclude.contains(question)) {
-            continue;
-        }
+      if (questionsToExclude.contains(question)) {
+        continue;
+      }
       out.add(perQuestion);
     }
     return objectMapper.writeValueAsString(out);
   }
 
+  /**
+   * summarizedJsonWithoutDemo 배열의 맨 앞에 { "totalCount": { "value": N } } 형태의 헤더를 추가합니다.
+   * - 배열 요소를 Map<String, Map<String, Object>>로 파싱하는 기존 로직과 호환되도록 값(Map)을 중첩합니다.
+   * - 입력이 null/blank이거나 배열 파싱 실패 시에도 헤더만 담긴 배열을 반환합니다.
+   */
+  public static String prependTotalCount(String arrayJson, int totalCount, ObjectMapper objectMapper) throws IOException {
+    Map<String, Object> headerValue = new LinkedHashMap<>();
+    headerValue.put("value", totalCount);
+
+    Map<String, Object> header = new LinkedHashMap<>();
+    header.put("totalCount", headerValue);
+
+    if (arrayJson == null || arrayJson.isBlank()) {
+      List<Object> onlyHeader = new ArrayList<>();
+      onlyHeader.add(header);
+      return objectMapper.writeValueAsString(onlyHeader);
+    }
+
+    try {
+      List<Object> items = objectMapper.readValue(arrayJson, new TypeReference<List<Object>>() {});
+      List<Object> result = new ArrayList<>(items.size() + 1);
+      result.add(header);
+      result.addAll(items);
+      return objectMapper.writeValueAsString(result);
+    } catch (Exception e) {
+      List<Object> onlyHeader = new ArrayList<>();
+      onlyHeader.add(header);
+      return objectMapper.writeValueAsString(onlyHeader);
+    }
+  }
+
   private static int toInt(Object v) {
-      if (v instanceof Number n) {
-          return n.intValue();
-      }
+    if (v instanceof Number n) {
+      return n.intValue();
+    }
     try {
       return Integer.parseInt(String.valueOf(v));
     } catch (Exception ignore) {
