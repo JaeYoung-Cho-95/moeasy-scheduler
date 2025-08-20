@@ -41,7 +41,7 @@ public class SurveyResultScheduler {
   private final NaverCloudStudioService naverCloudStudioService;
 
   @Transactional
-  @Scheduled(cron = "0 */1 * * * *", zone = "Asia/Seoul")
+  @Scheduled(cron = "0 */10 * * * *", zone = "Asia/Seoul")
   public void logSurveyResultsUpdatedInLast10Min() {
     LocalDateTime now = LocalDateTime.now(ZONE_ID);
     LocalDateTime tenMinutesAgo = now.minusMinutes(10);
