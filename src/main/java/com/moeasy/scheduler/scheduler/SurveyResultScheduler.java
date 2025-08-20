@@ -33,12 +33,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class SurveyResultScheduler {
 
   private static final ZoneId ZONE_ID = ZoneId.of("Asia/Seoul");
+  private static final int MAX_RETRY = 3;
+  private static final long INITIAL_BACKOFF_MILLIS = 500L;
+
   private final SurveyRepository surveyRepository;
   private final QuestionRepository questionRepository;
   private final NaverCloudStudioService naverCloudStudioService;
 
   @Transactional
-  @Scheduled(cron = "0 */10 * * * *", zone = "Asia/Seoul")
+  @Scheduled(cron = "0 */1 * * * *", zone = "Asia/Seoul")
   public void logSurveyResultsUpdatedInLast10Min() {
     LocalDateTime now = LocalDateTime.now(ZONE_ID);
     LocalDateTime tenMinutesAgo = now.minusMinutes(10);
@@ -53,37 +56,67 @@ public class SurveyResultScheduler {
 
     log.info("[SurveyResults] 최근 10분({} ~ {}) 갱신건수: {}", tenMinutesAgo, now, updated.size());
 
-    try {
-      for (Survey survey : updated) {
-        Question question = questionRepository.findBySurveyId(survey.getId());
-        Integer totalCount = question.getCount();
-        String json = survey.getResultsJson();
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        String summarizedJson = SurveyUtils.summarizeMaxChoices(json, objectMapper);
-        String summarizedJsonWithoutDemo = SurveyUtils.excludeAgeAndGender(summarizedJson,
-            objectMapper);
-        ContentDto contentDto = getContentData(summarizedJsonWithoutDemo, objectMapper);
-
-        List<GraphItemDto> graphData = SurveyUtils.extractGraphsData(json, objectMapper);
-        List<String> keywordsData = getKeywordsData(summarizedJson, objectMapper);
-        SentencesListDto sentencesData = getSentencesData(summarizedJson, totalCount, objectMapper);
-
-        SaveDataDto saveDataDto = SaveDataDto.builder()
-            .subject(question.getTitle())
-            .graphs(graphData.isEmpty() ? null : graphData)
-            .keywords(keywordsData)
-            .content(contentDto.getContent())
-            .sentences(sentencesData.getSentences())
-            .totalCount(totalCount)
-            .build();
-
-        String saveJson = objectMapper.writeValueAsString(saveDataDto); // 단일 라인 JSON
-        survey.updateSummarizeJson(saveJson);
-      }
-    } catch (Exception e) {
-      log.info(e.getMessage());
+    for (Survey survey : updated) {
+      processSurveyWithRetry(survey);
     }
+  }
+
+  private void processSurveyWithRetry(Survey survey) {
+    for (int attempt = 1; attempt <= MAX_RETRY; attempt++) {
+      try {
+        processSingleSurvey(survey);
+        if (attempt > 1) {
+          log.info("[SurveyResults] surveyId={} 처리 성공 (재시도 {}회 후 성공)", survey.getId(), attempt - 1);
+        }
+        return;
+      } catch (Exception e) {
+        log.warn("[SurveyResults] surveyId={} 처리 실패 (attempt {}/{}): {}", survey.getId(), attempt, MAX_RETRY, e.getMessage());
+        if (attempt < MAX_RETRY) {
+          sleepWithBackoff(attempt);
+        } else {
+          log.error("[SurveyResults] surveyId={} 처리 최종 실패 ({}회 시도)", survey.getId(), MAX_RETRY, e);
+        }
+      }
+    }
+  }
+
+
+  private void sleepWithBackoff(int attempt) {
+    long delay = INITIAL_BACKOFF_MILLIS * (1L << (attempt - 1)); // 0.5s, 1s, 2s...
+    try {
+      Thread.sleep(delay);
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
+
+  private void processSingleSurvey(Survey survey) throws IOException {
+    Question question = questionRepository.findBySurveyId(survey.getId());
+    Integer totalCount = question.getCount();
+    String json = survey.getResultsJson();
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    String summarizedJson = SurveyUtils.summarizeMaxChoices(json, objectMapper);
+    String summarizedJsonWithoutDemo = SurveyUtils.excludeAgeAndGender(summarizedJson,
+        objectMapper);
+    ContentDto contentDto = getContentData(summarizedJsonWithoutDemo, objectMapper);
+
+    List<GraphItemDto> graphData = SurveyUtils.extractGraphsData(json, objectMapper);
+    List<String> keywordsData = getKeywordsData(summarizedJson, objectMapper);
+    SentencesListDto sentencesData = getSentencesData(summarizedJson, totalCount, objectMapper);
+
+    SaveDataDto saveDataDto = SaveDataDto.builder()
+        .subject(question.getTitle())
+        .graphs(graphData.isEmpty() ? null : graphData)
+        .keywords(keywordsData)
+        .content(contentDto.getContent())
+        .sentences(sentencesData.getSentences())
+        .totalCount(totalCount)
+        .build();
+
+    String saveJson = objectMapper.writeValueAsString(saveDataDto); // 단일 라인 JSON
+    survey.updateSummarizeJson(saveJson);
   }
 
   private ContentDto getContentData(String summarizedJson, ObjectMapper objectMapper)
