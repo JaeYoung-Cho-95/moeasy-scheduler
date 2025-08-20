@@ -103,8 +103,8 @@ public class SurveyResultScheduler {
     ContentDto contentDto = getContentData(summarizedJsonWithoutDemo, objectMapper);
 
     List<GraphItemDto> graphData = SurveyUtils.extractGraphsData(json, objectMapper);
-    List<String> keywordsData = getKeywordsData(summarizedJson, objectMapper);
-    SentencesListDto sentencesData = getSentencesData(summarizedJson, totalCount, objectMapper);
+    List<String> keywordsData = getKeywordsData(summarizedJsonWithoutDemo, objectMapper);
+    SentencesListDto sentencesData = getSentencesData(summarizedJsonWithoutDemo, totalCount, objectMapper);
 
     SaveDataDto saveDataDto = SaveDataDto.builder()
         .subject(question.getTitle())
